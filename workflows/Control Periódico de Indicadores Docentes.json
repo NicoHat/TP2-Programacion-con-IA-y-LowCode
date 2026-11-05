@@ -1,0 +1,64 @@
+{
+  "name": "Control Periódico de Indicadores Docentes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8415c900-c731-45bc-bc1b-5eebc72a65ad",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/indicadores",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "9799ace5-2dd5-414f-8bb7-83df450f8e12",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e428ff30-4492-4070-b814-90ce03a11c2c",
+  "meta": {
+    "instanceId": "b59784b42d0fc69f46e013f0ada4506706eb408f7e9cef6ad7f44b3e725d78f8"
+  },
+  "nodeGroups": [],
+  "id": "GVqOI60iW9Fqi8Mu",
+  "tags": []
+}

@@ -1,0 +1,65 @@
+{
+  "name": "Webhook request",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "c3029da2-1c51-45b7-ab66-666c8530ef76",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f2d6f497-a6f3-425f-beb2-f547c286b5a7",
+      "name": "Webhook",
+      "webhookId": "c3029da2-1c51-45b7-ab66-666c8530ef76"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/docentes",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"nombre\": \"{{ $json.body.nombre }}\",\n  \"email\": \"{{ $json.body.email }}\",\n  \"materia\": \"{{ $json.body.materia }}\",\n  \"dedicacion\": \"{{ $json.body.dedicacion }}\",\n  \"cv_resumen\": \"{{ $json.body.cv_resumen }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "0016f81e-a97a-449f-b6aa-69863921c440",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "70e68f7b-fc28-4f47-a3f4-40f59fee540b",
+  "meta": {
+    "instanceId": "b59784b42d0fc69f46e013f0ada4506706eb408f7e9cef6ad7f44b3e725d78f8"
+  },
+  "nodeGroups": [],
+  "id": "k16mDVaWyO6iGA0A",
+  "tags": []
+}

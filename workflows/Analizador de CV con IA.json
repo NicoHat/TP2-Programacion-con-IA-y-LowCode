@@ -1,0 +1,60 @@
+{
+  "name": "Analizador de CV con IA",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "85930a25-2542-429e-bb47-3b0ba9497005",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"llama3\",\n  \"prompt\": \"Extrae las habilidades principales y áreas de experiencia de este perfil docente: Ingeniero en Sistemas experto en bases de datos y Python.\",\n  \"stream\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b1750269-15de-4143-b377-a3022e6f05b2",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "50a58235-9d99-49df-a245-f76678b75d64",
+  "meta": {
+    "instanceId": "b59784b42d0fc69f46e013f0ada4506706eb408f7e9cef6ad7f44b3e725d78f8"
+  },
+  "nodeGroups": [],
+  "id": "hL9YzBU5G6CME5f1",
+  "tags": []
+}
