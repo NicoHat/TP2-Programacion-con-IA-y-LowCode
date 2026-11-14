@@ -1,0 +1,182 @@
+================================================================================
+DOCUMENTACIÓN TÉCNICA - ROL 2: BASE DE DATOS Y GESTIÓN DE DATOS (SQLite)
+Archivo principal: backend/database.py
+Base de datos generada: data/docentes.db
+================================================================================
+
+1. ARQUITECTURA DE ALMACENAMIENTO Y CONEXIÓN
+--------------------------------------------------------------------------------
+- Motor utilizado: SQLite3 (base de datos relacional embebida en archivo local).
+- Ubicación física: Se utiliza la librería "pathlib" (BASE_DIR / "data" / "docentes.db")
+  para construir una ruta absoluta hacia la raíz del proyecto. Esto evita errores
+  si el servidor se ejecuta desde distintas carpetas o terminales.
+- Persistencia: Todos los datos se guardan físicamente en el archivo "docentes.db".
+  Al usar `conn.commit()` en cada operación de escritura, los datos persisten en el
+  disco rígido y no se pierden al reiniciar FastAPI, Streamlit o Docker.
+
+
+2. DISEÑO DEL ESQUEMA: TABLAS, CLAVES Y RELACIONES
+--------------------------------------------------------------------------------
+
+A) TABLA 1: "materias"
+   Propósito: Almacena el catálogo de materias/cátedras de la institución.
+   Columnas:
+   - id (INTEGER PRIMARY KEY AUTOINCREMENT): Clave primaria única de la materia.
+   - nombre (TEXT NOT NULL UNIQUE): Nombre de la materia (no permite duplicados).
+   - departamento (TEXT NOT NULL): Área académica a la que pertenece.
+   - cuatrimestre (TEXT NOT NULL): Período de dictado (1er Cuatrimestre, 2do, Anual).
+   - horas_semanales (INTEGER NOT NULL DEFAULT 4 CHECK(horas_semanales > 0)):
+     Valida que la carga horaria sea siempre un número positivo.
+
+B) TABLA 2: "docentes"
+   Propósito: Almacena el legajo principal de cada profesor de la planta docente.
+   Columnas:
+   - id (INTEGER PRIMARY KEY AUTOINCREMENT): Clave primaria única del docente.
+   - nombre (TEXT NOT NULL): Nombre y apellido completo.
+   - email (TEXT NOT NULL UNIQUE): Correo institucional (restricción UNIQUE para
+     impedir que se registre dos veces al mismo docente).
+   - materia (TEXT NOT NULL): Nombre de la materia asignada (mantiene compatibilidad
+     directa con los formularios de Streamlit y n8n).
+   - materia_id (INTEGER - FOREIGN KEY): Clave foránea que apunta a "materias(id)"
+     con regla ON DELETE SET NULL. Garantiza la relación formal entre el docente
+     y su cátedra.
+   - dedicacion (TEXT NOT NULL CHECK): Restricción de integridad que solo permite
+     tres valores exactos: 'Simple', 'Semi-exclusiva' o 'Exclusiva'.
+   - cv_resumen (TEXT DEFAULT ''): Antecedentes curriculares o resumen del perfil.
+   - fecha_alta (TIMESTAMP DEFAULT CURRENT_TIMESTAMP): Fecha y hora automática en
+     la que se registró al docente.
+
+C) TABLA 3: "historial_evaluaciones"
+   Propósito: Registra el historial de análisis curriculares realizados con IA.
+   Columnas:
+   - id (INTEGER PRIMARY KEY AUTOINCREMENT): Clave primaria de la evaluación.
+   - docente_id (INTEGER - FOREIGN KEY): Clave foránea que apunta a "docentes(id)"
+     con regla ON DELETE CASCADE (si se elimina un docente, se borra automáticamente
+     su historial de evaluaciones para no dejar registros huérfanos).
+   - cv_texto_original (TEXT NOT NULL): Texto del CV enviado a analizar.
+   - resumen_ia (TEXT NOT NULL): Devolución generada por el modelo de IA.
+   - fecha_evaluacion (TIMESTAMP DEFAULT CURRENT_TIMESTAMP): Fecha y hora del análisis.
+
+
+3. MANEJO DE ERRORES, VALIDACIONES Y TRANSACCIONES
+--------------------------------------------------------------------------------
+El módulo implementa manejo de errores en dos niveles complementarios:
+
+A) Validaciones previas en Python (Lanzan `ValueError`):
+   - Verifica que campos obligatorios (`nombre`, `email`, `materia`, `cv`) no estén vacíos.
+   - Valida el formato del correo electrónico (que contenga '@' y un dominio con '.').
+   - Comprueba que la dedicación esté dentro de `DEDICACIONES_VALIDAS`
+     ('Simple', 'Semi-exclusiva', 'Exclusiva').
+   - Valida que los IDs (`docente_id`) sean números enteros positivos.
+
+B) Excepciones de Base de Datos (SQLite):
+   - `sqlite3.IntegrityError`: Captura violaciones de restricciones SQL como emails
+     duplicados (`UNIQUE`), dedicaciones inválidas (`CHECK`) o claves foráneas
+     inexistentes (`FOREIGN KEY`), haciendo `conn.rollback()` y devolviendo un
+     mensaje comprensible al usuario.
+   - `sqlite3.Error` / `RuntimeError`: Captura fallos técnicos o de escritura en
+     disco, ejecuta `conn.rollback()` para evitar datos corruptos a mitad de una
+     transacción y asegura mediante el bloque `finally: conn.close()` que el archivo
+     "docentes.db" nunca quede bloqueado.
+
+
+4. EXPLICACIÓN DE CADA PROCEDIMIENTO (FUNCIONES EN database.py)
+--------------------------------------------------------------------------------
+
+--- BLOQUE DE CONEXIÓN E INICIALIZACIÓN ---
+
+1) get_connection()
+   - Qué hace: Crea la carpeta "data/" si no existe (`os.makedirs`), abre la
+     conexión con el archivo "data/docentes.db", configura `sqlite3.Row` (para poder
+     leer las columnas por su nombre como diccionarios) y ejecuta
+     `PRAGMA foreign_keys = ON;` para activar las claves foráneas. Incluye manejo
+     de excepciones `(sqlite3.Error, OSError)`.
+
+2) init_db()
+   - Qué hace: Se ejecuta al iniciar el sistema. Abre una conexión, ejecuta los
+     comandos `CREATE TABLE IF NOT EXISTS` de las 3 tablas dentro de un bloque
+     `try / except / finally` (con `commit()` y `rollback()`) y llama a `seed_db()`.
+
+3) seed_db()
+   - Qué hace: Es el procedimiento de carga inicial de datos de prueba (Seeding).
+   - Cómo funciona: Consulta `SELECT COUNT(*) FROM docentes`. Si el resultado es
+     mayor a 0, retorna sin hacer nada (evitando duplicar datos al reiniciar).
+     Si es 0 (base vacía), inserta 6 materias iniciales, obtiene sus IDs, inserta
+     8 profesores realistas de distintas cátedras/dedicaciones con sus CVs, y carga
+     2 evaluaciones iniciales en `historial_evaluaciones`.
+
+
+--- BLOQUE DE VALIDACIÓN Y AUXILIARES ---
+
+4) validar_datos_docente(nombre, email, materia, dedicacion)
+   - Qué hace: Función centralizada de validación. Revisa que ningún campo obligatorio
+     venga vacío, que el email tenga estructura válida (`usuario@dominio.com`) y que
+     la dedicación pertenezca a `('Simple', 'Semi-exclusiva', 'Exclusiva')`. Si algo
+     falla, lanza un `ValueError` descriptivo antes de abrir la base de datos.
+
+5) _obtener_o_crear_materia_id(cursor, nombre_materia)
+   - Qué hace: Procedimiento interno auxiliar. Busca el `id` de una materia por su
+     nombre (sin distinguir mayúsculas/minúsculas). Si la materia aún no existe en
+     la tabla `materias`, la crea automáticamente y devuelve su nuevo `id` para
+     asignarlo a la clave foránea `materia_id` del docente.
+
+
+--- BLOQUE DE CONSULTA, BÚSQUEDA Y FILTRADO ---
+
+6) obtener_docentes(materia=None, dedicacion=None, busqueda=None)
+   - Qué hace: Devuelve la lista de docentes permitiendo combinar filtros opcionales:
+     * `materia`: búsqueda parcial con `LIKE`.
+     * `dedicacion`: filtro exacto validado contra `DEDICACIONES_VALIDAS`.
+     * `busqueda`: busca texto libre en `nombre`, `email` o `cv_resumen`.
+   - Seguridad: Utiliza consultas parametrizadas (`?`) para prevenir Inyección SQL.
+
+7) obtener_docente_por_id(docente_id)
+   - Qué hace: Valida que `docente_id` sea un entero positivo y busca al docente por
+     su clave primaria (`id`). Devuelve un diccionario con sus datos o `None`.
+
+8) listar_materias()
+   - Qué hace: Devuelve todas las materias registradas ordenadas alfabéticamente.
+
+
+--- BLOQUE DE ALTA, MODIFICACIÓN Y BAJA (ABM / CRUD) ---
+
+9) crear_nuevo_docente(nombre, email, materia, dedicacion, cv_resumen="")
+   - Qué hace: Valida los datos con `validar_datos_docente()`, obtiene o crea el
+     `materia_id` correspondiente e inserta al docente en la tabla `docentes`.
+     Hace `conn.commit()` y devuelve el `id` creado. Si el email ya existe en la
+     base, captura `sqlite3.IntegrityError`, hace `rollback()` y lanza un mensaje
+     claro indicando que el email está duplicado.
+
+10) actualizar_docente(docente_id, nombre=None, email=None, materia=None, dedicacion=None, cv_resumen=None)
+    - Qué hace: Permite modificar uno o varios campos de un docente existente.
+      Conserva los valores actuales en los parámetros que no se envíen (`None`),
+      valida los datos resultantes, actualiza `materia_id` si cambió la materia y
+      guarda los cambios con `conn.commit()`. Devuelve `True` si actualizó o `False`
+      si el `docente_id` no existe.
+
+11) eliminar_docente(docente_id)
+    - Qué hace: Elimina un docente según su `id`. Gracias a la regla
+      `ON DELETE CASCADE`, SQLite elimina automáticamente sus evaluaciones asociadas
+      en `historial_evaluaciones`. Devuelve `True` si se borró el registro.
+
+
+--- BLOQUE DE INTELIGENCIA ARTIFICIAL, HISTORIAL Y MÉTRICAS ---
+
+12) registrar_evaluacion_cv(cv_texto_original, resumen_ia, docente_id=None)
+    - Qué hace: Valida que los textos no estén vacíos y guarda en la tabla
+      `historial_evaluaciones` el CV original junto con el análisis de la IA.
+      Si recibe un `docente_id`, verifica que exista y actualiza también su campo
+      `cv_resumen` en la tabla `docentes`.
+
+13) calcular_indicadores()
+    - Qué hace: Calcula en tiempo real los indicadores de la planta docente mediante
+      consultas SQL de agregación (`COUNT(*)` y `GROUP BY`):
+      * Total de docentes activos.
+      * Distribución de docentes por dedicación (Exclusiva, Semi-exclusiva, Simple).
+      * Cantidad de docentes asignados por cada materia.
+
+14) obtener_historial_evaluaciones(docente_id=None)
+    - Qué hace: Consulta la tabla `historial_evaluaciones` realizando un `LEFT JOIN`
+      con la tabla `docentes` (usando la clave foránea `h.docente_id = d.id`) para
+      devolver cada evaluación de IA junto con el nombre y la materia del docente.
+      Permite filtrar opcionalmente por un `docente_id` específico.
