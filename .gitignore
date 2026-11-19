@@ -10,20 +10,35 @@ __pycache__/
 *.so
 .Python
 
-# Bases de datos locales SQLite (opcional, por si no quieres versionar la DB de prueba)
+# Tests y cobertura (se generan al correr pytest)
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bases de datos locales SQLite (se recrean solas al iniciar la API)
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
 
 # Variables de entorno y credenciales (por seguridad)
 .env
+.env.*
+
+# Logs
+*.log
+
+# Notebooks de Jupyter (pruebas locales)
+.ipynb_checkpoints/
 
 # Directorios de editores y sistemas operativos
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Archivos locales de repaso
+# Archivos locales de repaso / estudio (no se suben)
 REPASO/
 guia_repaso_tp2.md
+backend/README_BACKEND.md

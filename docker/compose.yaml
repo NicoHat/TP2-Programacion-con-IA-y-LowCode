@@ -1,16 +1,78 @@
-version: '3.8'
+# Ejecutar desde la carpeta docker/:
+#   docker compose up -d --build     -> construye e inicia API + n8n
+#   docker compose ps                -> ver estado
+#   docker compose logs -f api       -> ver logs de la API
+#   docker compose restart api       -> reiniciar un servicio
+#   docker compose down              -> detener todo (los datos se conservan)
+#
+# Puertos:
+#   API FastAPI  -> http://localhost:8000  (docs en /docs)
+#   n8n          -> http://localhost:5678
+#   Ollama       -> corre en la PC (fuera de Docker) en el puerto 11434
+#
+# Comunicación entre contenedores:
+#   n8n -> API   : http://api:8000            (nombre del servicio en la red de Compose)
+#   API -> Ollama: http://host.docker.internal:11434
 
 volumes:
   n8n_storage:
 
 services:
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: planta-docente-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3
+      - OLLAMA_TIMEOUT=180
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # necesario en Linux; en Windows/Mac ya existe
+    volumes:
+      - ../data:/app/data                     # la base SQLite queda en la carpeta data/ del proyecto
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   n8n:
     image: n8nio/n8n:latest
-    restart: always
+    container_name: planta-docente-n8n
+    restart: unless-stopped
     ports:
       - "5678:5678"
     environment:
       - N8N_HOST=localhost
       - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Argentina/Buenos_Aires
+      - TZ=America/Argentina/Buenos_Aires
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - n8n_storage:/home/node/.n8n
+    depends_on:
+      - api
+
+  # Frontend Streamlit (opcional). Para activarlo, en frontend/app.py reemplazar
+  #   API_URL = "http://127.0.0.1:8000"
+  # por
+  #   API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+  # y descomentar este bloque:
+  #
+  # frontend:
+  #   image: python:3.12-slim
+  #   working_dir: /app
+  #   command: sh -c "pip install --no-cache-dir streamlit==1.66.1 requests==2.34.2 && streamlit run frontend/app.py --server.address 0.0.0.0"
+  #   ports:
+  #     - "8501:8501"
+  #   environment:
+  #     - API_URL=http://api:8000
+  #   volumes:
+  #     - ../frontend:/app/frontend
+  #   depends_on:
+  #     - api

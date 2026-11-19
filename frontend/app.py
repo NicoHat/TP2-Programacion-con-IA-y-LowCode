@@ -188,7 +188,7 @@ elif opcion == "➕ Registrar Docente":
                     if respuesta.status_code in [200, 201]:
                         st.success("✅ ¡Docente registrado con éxito!")
                         st.balloons()
-                    elif respuesta.status_code == 400:
+                    elif respuesta.status_code in (400, 409, 422):
                         detalle = respuesta.json().get("detail", "Datos inválidos.")
                         st.error(f"⚠️ Error de validación: {detalle}")
                     else:
