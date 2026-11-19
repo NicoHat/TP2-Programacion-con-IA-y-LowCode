@@ -576,6 +576,29 @@ def obtener_historial_evaluaciones(docente_id=None):
         conn.close()
 
 
+def eliminar_evaluacion(evaluacion_id: int) -> bool:
+    """
+    Elimina un registro de evaluación de la tabla historial_evaluaciones.
+    Devuelve True si se eliminó, o False si el ID no existía.
+    """
+    if not isinstance(evaluacion_id, int) or evaluacion_id <= 0:
+        raise ValueError("El ID de la evaluación debe ser un número entero positivo.")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM historial_evaluaciones WHERE id = ?", (evaluacion_id,))
+        eliminado = cursor.rowcount > 0
+        conn.commit()
+        return eliminado
+    except sqlite3.Error as e:
+        conn.rollback()
+        print(f"Error al eliminar la evaluación #{evaluacion_id}: {e}")
+        raise RuntimeError(f"No se pudo eliminar la evaluación: {e}")
+    finally:
+        conn.close()
+
+
 # Permite ejecutar este archivo directamente (python backend/database.py)
 # para crear y poblar la base de datos de inmediato.
 if __name__ == "__main__":
