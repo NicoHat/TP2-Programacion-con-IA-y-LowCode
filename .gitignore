@@ -23,3 +23,7 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Archivos locales de repaso
+REPASO/
+guia_repaso_tp2.md
