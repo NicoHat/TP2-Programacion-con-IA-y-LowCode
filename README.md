@@ -21,7 +21,7 @@ Centralizar la información de la planta docente de una institución universitar
 | Base de datos | SQLite | `backend/database.py` → `data/docentes.db` |
 | Inteligencia Artificial | Ollama + modelo `llama3` (local, gratuito) | `backend/ia.py` |
 | Automatización | n8n | `workflows/` |
-| Contenedores | Docker / Docker Compose | `backend/Dockerfile`, `docker/compose.yaml` |
+| Contenedores | Docker / Docker Compose | `backend/Dockerfile`, `frontend/Dockerfile`, `docker/compose.yaml` |
 | Pruebas | pytest | `tests/` |
 
 ## Arquitectura
@@ -99,13 +99,14 @@ cd docker
 docker compose up -d --build
 docker compose ps
 docker compose logs -f api
-docker compose restart api
+docker compose restart frontend
 docker compose stop
 docker compose down
 ```
 
 | Servicio | Puerto | Notas |
 |---|---|---|
+| Frontend | 8501 | Se conecta a la API por `API_URL` |
 | API | 8000 | Volumen `../data` |
 | n8n | 5678 | Volumen `n8n_storage` |
 | Ollama | 11434 | Ejecutado en el host |
@@ -119,6 +120,17 @@ docker compose down
 | `OLLAMA_TIMEOUT` | `120` | Tiempo máximo de espera (segundos) |
 
 ## Principales funcionalidades
+
+### Interfaz (Streamlit)
+
+| Sección | Funcionalidades |
+|---|---|
+| Planta Docente | Búsqueda y filtros por materia y dedicación, edición, baja con confirmación, evaluaciones de CV de cada docente |
+| Registrar Docente | Alta con validación, selección de materia del catálogo o materia nueva, carga del CV desde archivo `.txt` / `.pdf` |
+| Indicadores y Alertas | Métricas de la planta, distribución por dedicación y materia, cobertura de materias, alertas por severidad, informe ejecutivo con IA |
+| Análisis de CV con IA | CV por texto o archivo, resultado de la IA y puntaje por reglas lado a lado, validación de la respuesta, revisión y aprobación antes de guardar, historial |
+
+El estado de la API y de Ollama se muestra en la barra lateral.
 
 ### Gestión de docentes
 
@@ -187,8 +199,11 @@ Las pruebas usan una base de datos temporal y una respuesta simulada de Ollama.
 
 | Integrante | Responsabilidad |
 |---|---|
-| Nicolas Daniel Rotiroti | Backend: API FastAPI, reglas de negocio, integración con IA, Docker y pruebas | Automatizaciones n8n
-| Tomas Gonzalez | Base de datos: modelo SQLite, validaciones y datos de ejemplo |
+| NicoHat | Backend: API FastAPI, reglas de negocio, integración con IA, Docker y pruebas |
+| Siseronte | Base de datos: modelo SQLite, validaciones y datos de ejemplo |
 | Daniel Perez Albiero | Frontend: interfaz en Streamlit e integración con la API |
+| *(completar)* | Automatizaciones n8n |
 
+## Bitácora de uso de IA
 
+Ver [`docs/bitacora_ia.md`](docs/bitacora_ia.md).

@@ -1,368 +1,438 @@
-import streamlit as st
+import io
+import os
+
 import requests
+import streamlit as st
 
-# ==============================================================================
-# CONFIGURACIÓN GENERAL Y CONEXIÓN CON LA API
-# ==============================================================================
-# URL base de la API FastAPI. Si corre en la misma máquina, se usa localhost en el puerto 8000.
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
+DEDICACIONES = ["Simple", "Semi-exclusiva", "Exclusiva"]
+NUEVA_MATERIA = "➕ Otra materia (nueva)"
 
-st.set_page_config(
-    page_title="Sistema de Gestión de Planta Docente",
-    page_icon="🎓",
-    layout="wide"
-)
-
-# ==============================================================================
-# MENÚ DE NAVEGACIÓN LATERAL (SIDEBAR)
-# ==============================================================================
-# Usamos un st.sidebar.radio que funciona como un enrutador simple.
-# Según la opción seleccionada, el script ejecuta la sección correspondiente.
-st.sidebar.title("🎓 Menú Principal")
-opcion = st.sidebar.radio(
-    "Selecciona una sección:",
-    [
-        "👥 Planta Docente",
-        "➕ Registrar Docente",
-        "📊 Panel de Indicadores",
-        "🤖 Análisis de CV con IA"
-    ]
-)
+st.set_page_config(page_title="Sistema de Gestión de Planta Docente", page_icon="🎓", layout="wide")
 
 
-
-# ==============================================================================
-# SECCIÓN 1: 👥 PLANTA DOCENTE (Listado, Búsqueda y Eliminación)
-# ==============================================================================
-if opcion == "👥 Planta Docente":
-    st.header("👥 Gestión de Planta Docente")
-    st.markdown("Consulta, filtra y administra los profesores registrados en la institución.")
-
-    # Filtros interactivos en columnas para que se vea ordenado
-    col_busqueda, col_filtro = st.columns([3, 1])
-    with col_busqueda:
-        texto_busqueda = st.text_input("🔍 Buscar por nombre, materia o email:", placeholder="Ej: Perez, Sistemas, algoritmos...")
-    with col_filtro:
-        filtro_dedicacion = st.selectbox("Filtrar por dedicación:", ["Todas", "Simple", "Semi-exclusiva", "Exclusiva"])
-
-    # Llamada a la API mediante GET /docentes
+def api(metodo, ruta, timeout=10, **kwargs):
     try:
-        respuesta = requests.get(f"{API_URL}/docentes", timeout=5)
-        
-        if respuesta.status_code == 200:
-            docentes = respuesta.json()
-
-            # Aplicamos los filtros en el frontend sobre la lista obtenida
-            if filtro_dedicacion != "Todas":
-                docentes = [d for d in docentes if d.get("dedicacion") == filtro_dedicacion]
-            
-            if texto_busqueda:
-                termino = texto_busqueda.lower()
-                docentes = [
-                    d for d in docentes
-                    if termino in d.get("nombre", "").lower()
-                    or termino in d.get("materia", "").lower()
-                    or termino in d.get("email", "").lower()
-                ]
-
-            st.write(f"Mostrando **{len(docentes)}** docente(s) registrado(s):")
-
-            if not docentes:
-                st.info("No se encontraron docentes con los criterios seleccionados.")
-            else:
-                # Mostramos cada docente en una tarjeta desplegable (st.expander)
-                for doc in docentes:
-                    doc_id = doc.get("id")
-                    nombre = doc.get("nombre", "Sin nombre")
-                    materia = doc.get("materia", "Sin materia")
-                    dedicacion = doc.get("dedicacion", "No especificada")
-                    email = doc.get("email", "Sin email")
-                    cv = doc.get("cv_resumen", "")
-
-                    with st.expander(f"👨‍🏫 {nombre} — {materia} ({dedicacion})"):
-                        col_info, col_acciones = st.columns([4, 1])
-                        
-                        with col_info:
-                            st.write(f"📧 **Correo electrónico:** `{email}`")
-                            st.write(f"💼 **Dedicación:** {dedicacion}")
-                            st.write(f"📝 **Perfil / Antecedentes:** {cv if cv else '_Sin antecedentes cargados._'}")
-                        
-                        with col_acciones:
-                            # Botón para eliminar docente llamando a DELETE /docentes/{id}
-                            if st.button("🗑️ Eliminar", key=f"btn_eliminar_{doc_id}"):
-                                try:
-                                    res_del = requests.delete(f"{API_URL}/docentes/{doc_id}", timeout=5)
-                                    if res_del.status_code in [200, 204]:
-                                        st.success(f"Docente #{doc_id} eliminado.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"No se pudo eliminar (Código {res_del.status_code}).")
-                                except requests.exceptions.RequestException:
-                                    st.error("Error al conectar con la API para eliminar.")
-
-                        # Formulario para editar datos del docente (Llamada HTTP PUT)
-                        with st.expander("✏️ Editar datos de este docente"):
-                            with st.form(f"form_editar_{doc_id}"):
-                                ed_col1, ed_col2 = st.columns(2)
-                                nuevo_nombre = ed_col1.text_input("Nombre y Apellido", value=nombre)
-                                nuevo_email = ed_col1.text_input("Correo Electrónico", value=email)
-                                nueva_materia = ed_col2.text_input("Materia Asignada", value=materia)
-                                
-                                opciones_ded = ["Simple", "Semi-exclusiva", "Exclusiva"]
-                                idx_ded = opciones_ded.index(dedicacion) if dedicacion in opciones_ded else 0
-                                nueva_dedicacion = ed_col2.selectbox("Dedicación", opciones_ded, index=idx_ded)
-                                nuevo_cv = st.text_area("Perfil / Antecedentes", value=cv)
-
-                                guardar_edicion = st.form_submit_button("💾 Guardar Cambios")
-
-                                if guardar_edicion:
-                                    if not nuevo_nombre.strip() or not nuevo_email.strip() or not nueva_materia.strip():
-                                        st.warning("⚠️ El nombre, email y materia no pueden estar vacíos.")
-                                    else:
-                                        payload_update = {
-                                            "nombre": nuevo_nombre.strip(),
-                                            "email": nuevo_email.strip(),
-                                            "materia": nueva_materia.strip(),
-                                            "dedicacion": nueva_dedicacion,
-                                            "cv_resumen": nuevo_cv.strip()
-                                        }
-                                        try:
-                                            res_put = requests.put(f"{API_URL}/docentes/{doc_id}", json=payload_update, timeout=5)
-                                            if res_put.status_code == 200:
-                                                st.success("✅ ¡Docente actualizado con éxito!")
-                                                st.rerun()
-                                            else:
-                                                st.error(f"❌ Error al actualizar: {res_put.json().get('detail', 'Error desconocido')}")
-                                        except requests.exceptions.RequestException:
-                                            st.error("❌ Error de conexión al intentar actualizar.")
-        else:
-            st.error(f"Error al obtener docentes desde la API (Código HTTP {respuesta.status_code}).")
-
+        r = requests.request(metodo, f"{API_URL}{ruta}", timeout=timeout, **kwargs)
     except requests.exceptions.ConnectionError:
-        st.error("❌ No se pudo conectar con el servidor de FastAPI. Verifica que esté iniciado (`uvicorn backend.main:app`).")
+        return None, {"detail": f"No se pudo conectar con la API en {API_URL}. Verificá que esté iniciada."}
     except requests.exceptions.Timeout:
-        st.error("⏳ La petición a la API tardó demasiado tiempo en responder.")
+        return None, {"detail": "La API tardó demasiado en responder."}
+    try:
+        datos = r.json()
+    except ValueError:
+        datos = {}
+    return r.status_code, datos
 
 
-# ==============================================================================
-# SECCIÓN 2: ➕ REGISTRAR DOCENTE (Formulario con Validaciones)
-# ==============================================================================
-elif opcion == "➕ Registrar Docente":
-    st.header("➕ Registro de Nuevo Docente")
-    st.markdown("Completa el formulario para dar de alta un nuevo docente en el sistema.")
+def detalle(datos):
+    if isinstance(datos, dict):
+        return datos.get("detail", "Error desconocido.")
+    return "Error desconocido."
 
-    with st.form("form_alta_docente", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            nombre = st.text_input("Nombre y Apellido *", placeholder="Ej: Lic. Martín Rossi")
-            email = st.text_input("Correo Electrónico Institucional *", placeholder="Ej: mrossi@universidad.edu.ar")
-        with col2:
-            materia = st.text_input("Materia Asignada *", placeholder="Ej: Elementos de Programación IA")
-            dedicacion = st.selectbox("Dedicación *", ["Simple", "Semi-exclusiva", "Exclusiva"])
 
-        cv_resumen = st.text_area("Perfil / Antecedentes Curriculares:", placeholder="Resumen de experiencia docente o técnica...")
+def mostrar_error(codigo, datos, prefijo=""):
+    mensaje = detalle(datos)
+    if codigo is None:
+        st.error(f"🔌 {mensaje}")
+    elif codigo == 404:
+        st.warning(f"🔎 {prefijo}{mensaje}")
+    elif codigo in (400, 409, 422):
+        st.error(f"⚠️ {prefijo}{mensaje} (código {codigo})")
+    elif codigo in (502, 503, 504):
+        st.error(f"🤖 {prefijo}{mensaje} (código {codigo})")
+    else:
+        st.error(f"❌ {prefijo}{mensaje} (código {codigo})")
 
-        enviar = st.form_submit_button("💾 Guardar Docente")
 
-        if enviar:
-            # Validaciones previas en el Frontend
-            if not nombre.strip() or not email.strip() or not materia.strip():
-                st.warning("⚠️ Los campos con asterisco (*) son obligatorios.")
-            elif "@" not in email or "." not in email:
-                st.warning("⚠️ Por favor ingresa un correo electrónico válido (ejemplo@dominio.com).")
-            else:
-                # Construcción del payload JSON a enviar a FastAPI
-                payload = {
-                    "nombre": nombre.strip(),
-                    "email": email.strip(),
-                    "materia": materia.strip(),
-                    "dedicacion": dedicacion,
-                    "cv_resumen": cv_resumen.strip()
-                }
+def catalogo_materias():
+    codigo, datos = api("GET", "/materias")
+    return datos if codigo == 200 else []
 
-                try:
-                    respuesta = requests.post(f"{API_URL}/docentes", json=payload, timeout=5)
-                    
-                    if respuesta.status_code in [200, 201]:
-                        st.success("✅ ¡Docente registrado con éxito!")
-                        st.balloons()
-                    elif respuesta.status_code in (400, 409, 422):
-                        detalle = respuesta.json().get("detail", "Datos inválidos.")
-                        st.error(f"⚠️ Error de validación: {detalle}")
+
+def selector_materia(etiqueta, materias, actual=None, key=None):
+    nombres = [m["nombre"] for m in materias]
+    opciones = nombres + [NUEVA_MATERIA]
+    indice = nombres.index(actual) if actual in nombres else 0
+    eleccion = st.selectbox(etiqueta, opciones, index=indice, key=key)
+    nueva = st.text_input("Nombre de la nueva materia", key=f"{key}_nueva" if key else None,
+                          placeholder="Solo si elegiste «Otra materia»")
+    return nueva.strip() if eleccion == NUEVA_MATERIA else eleccion
+
+
+def formato_pesos(valor):
+    return "$ " + f"{valor:,.0f}".replace(",", ".")
+
+
+def leer_archivo_cv(archivo):
+    if archivo.name.lower().endswith(".pdf"):
+        from pypdf import PdfReader
+        lector = PdfReader(io.BytesIO(archivo.getvalue()))
+        return "\n".join((pagina.extract_text() or "") for pagina in lector.pages).strip()
+    return archivo.getvalue().decode("utf-8", errors="ignore").strip()
+
+
+st.sidebar.title("🎓 Planta Docente")
+opcion = st.sidebar.radio(
+    "Sección",
+    ["👥 Planta Docente", "➕ Registrar Docente", "📊 Indicadores y Alertas", "🤖 Análisis de CV con IA"],
+)
+
+st.sidebar.divider()
+codigo_salud, salud = api("GET", "/health", timeout=4)
+if codigo_salud == 200:
+    st.sidebar.success(f"API conectada · {salud.get('docentes', 0)} docentes")
+    if salud.get("ollama") == "ok" and salud.get("modelo_descargado"):
+        st.sidebar.success(f"IA disponible · {salud.get('modelo')}")
+    elif salud.get("ollama") == "ok":
+        st.sidebar.warning(f"Ollama activo, falta el modelo {salud.get('modelo')}")
+    else:
+        st.sidebar.warning("IA no disponible (Ollama apagado)")
+else:
+    st.sidebar.error("API no disponible")
+
+
+if opcion == "👥 Planta Docente":
+    st.header("👥 Planta Docente")
+
+    materias = catalogo_materias()
+    c1, c2, c3 = st.columns([3, 2, 2])
+    busqueda = c1.text_input("🔍 Buscar", placeholder="Nombre, email o antecedentes")
+    filtro_materia = c2.selectbox("Materia", ["Todas"] + [m["nombre"] for m in materias])
+    filtro_dedicacion = c3.selectbox("Dedicación", ["Todas"] + DEDICACIONES)
+
+    parametros = {}
+    if busqueda.strip():
+        parametros["busqueda"] = busqueda.strip()
+    if filtro_materia != "Todas":
+        parametros["materia"] = filtro_materia
+    if filtro_dedicacion != "Todas":
+        parametros["dedicacion"] = filtro_dedicacion
+
+    codigo, docentes = api("GET", "/docentes", params=parametros)
+    if codigo != 200:
+        mostrar_error(codigo, docentes)
+        st.stop()
+
+    st.caption(f"{len(docentes)} docente(s) encontrados")
+    if not docentes:
+        st.info("No hay docentes que coincidan con los filtros.")
+
+    for doc in docentes:
+        doc_id = doc["id"]
+        with st.expander(f"👨‍🏫 {doc['nombre']} — {doc['materia']} ({doc['dedicacion']})"):
+            info, acciones = st.columns([4, 1])
+            with info:
+                st.markdown(f"**Email:** `{doc['email']}`")
+                st.markdown(f"**Materia:** {doc['materia']}  ·  **Dedicación:** {doc['dedicacion']}")
+                st.markdown(f"**Alta:** {doc.get('fecha_alta') or '-'}")
+                st.markdown(f"**Perfil:** {doc.get('cv_resumen') or '_Sin antecedentes cargados._'}")
+            with acciones:
+                confirmar = st.checkbox("Confirmar baja", key=f"conf_{doc_id}")
+                if st.button("🗑️ Eliminar", key=f"del_{doc_id}", disabled=not confirmar):
+                    codigo_del, datos_del = api("DELETE", f"/docentes/{doc_id}")
+                    if codigo_del == 204:
+                        st.toast(f"Docente #{doc_id} eliminado")
+                        st.rerun()
                     else:
-                        st.error(f"❌ Error al registrar docente (Código {respuesta.status_code}).")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ No se pudo conectar con FastAPI. Revisa que el backend esté encendido.")
+                        mostrar_error(codigo_del, datos_del)
 
+            if st.toggle("Ver evaluaciones de CV", key=f"ev_{doc_id}"):
+                codigo_ev, evaluaciones = api("GET", f"/docentes/{doc_id}/evaluaciones")
+                if codigo_ev != 200:
+                    mostrar_error(codigo_ev, evaluaciones)
+                elif not evaluaciones:
+                    st.caption("Sin evaluaciones registradas.")
+                else:
+                    for ev in evaluaciones:
+                        st.markdown(f"**#{ev['id']}** · {ev.get('fecha_evaluacion', '')}")
+                        st.write(ev.get("resumen_ia", ""))
 
-# ==============================================================================
-# SECCIÓN 3: 📊 PANEL DE INDICADORES (Métricas Institucionales)
-# ==============================================================================
-elif opcion == "📊 Panel de Indicadores":
-    st.header("📊 Panel de Indicadores de Planta Docente")
-    st.markdown("Visualización de métricas generales calculadas por el sistema.")
-
-    try:
-        # Obtenemos los indicadores desde la API
-        res_ind = requests.get(f"{API_URL}/indicadores", timeout=5)
-        # Obtenemos también la lista para calcular distribuciones visuales
-        res_doc = requests.get(f"{API_URL}/docentes", timeout=5)
-
-        if res_ind.status_code == 200 and res_doc.status_code == 200:
-            datos_ind = res_ind.json()
-            docentes = res_doc.json()
-            total_docentes = datos_ind.get("total_docentes", len(docentes))
-
-            # Métricas principales en tarjetas (st.metric)
-            m1, m2, m3, m4 = st.columns(4)
-            simples = sum(1 for d in docentes if d.get("dedicacion") == "Simple")
-            semi = sum(1 for d in docentes if d.get("dedicacion") == "Semi-exclusiva")
-            exclusivas = sum(1 for d in docentes if d.get("dedicacion") == "Exclusiva")
-
-            m1.metric("👥 Total Docentes", total_docentes)
-            m2.metric("🟢 Dedicación Simple", simples)
-            m3.metric("🟡 Semi-exclusiva", semi)
-            m4.metric("🟣 Exclusiva", exclusivas)
-
-            st.divider()
-
-            # Distribución gráfica por Dedicación
-            st.subheader("Distribución por Tipo de Dedicación")
-            datos_dedicacion = {
-                "Simple": simples,
-                "Semi-exclusiva": semi,
-                "Exclusiva": exclusivas
-            }
-            st.bar_chart(datos_dedicacion)
-
-            # Resumen de docentes por materia
-            st.subheader("Docentes por Asignatura")
-            materias_conteo = {}
-            for d in docentes:
-                mat = d.get("materia", "Sin materia")
-                materias_conteo[mat] = materias_conteo.get(mat, 0) + 1
-            
-            st.dataframe(
-                [{"Materia": k, "Cantidad de Docentes": v} for k, v in materias_conteo.items()],
-                use_container_width=True
-            )
-
-        else:
-            st.error("No se pudieron cargar los indicadores desde la API.")
-
-    except requests.exceptions.ConnectionError:
-        st.error("❌ No se pudo conectar con FastAPI.")
-
-
-# ==============================================================================
-# SECCIÓN 4: 🤖 ANÁLISIS DE CV CON IA (Procesamiento, Ollama e Historial)
-# ==============================================================================
-elif opcion == "🤖 Análisis de CV con IA":
-    st.header("🤖 Procesamiento y Análisis Curricular con IA")
-    st.markdown("""
-    Esta funcionalidad utiliza el modelo de lenguaje local **LLaMA 3** (ejecutado con Ollama)
-    para analizar perfiles o currículums de docentes, extrayendo habilidades técnicas, títulos destacados
-    y una evaluación de pertinencia para la cátedra universitaria.
-    """)
-
-    # Obtenemos la lista de docentes para permitir asociar la evaluación a uno de ellos
-    lista_docentes = []
-    try:
-        r_docs = requests.get(f"{API_URL}/docentes", timeout=5)
-        if r_docs.status_code == 200:
-            lista_docentes = r_docs.json()
-    except requests.exceptions.RequestException:
-        pass
-
-    opciones_doc = ["(Ninguno - Evaluación independiente / nuevo postulante)"] + [
-        f"#{d['id']} - {d['nombre']} ({d['materia']})" for d in lista_docentes
-    ]
-    docente_seleccionado = st.selectbox("Asociar análisis a un docente existente (Opcional):", opciones_doc)
-
-    docente_id_elegido = None
-    if docente_seleccionado and not docente_seleccionado.startswith("(Ninguno"):
-        docente_id_elegido = int(docente_seleccionado.split(" - ")[0].replace("#", ""))
-
-    cv_input = st.text_area(
-        "Pega aquí el texto del Currículum o Perfil a evaluar:",
-        height=180,
-        placeholder="Ej: Licenciada en Ciencias de la Computación (UBA). 8 años de experiencia docente en Algoritmos y Estructuras de Datos, desarrollo backend con Python, FastAPI y bases de datos relacionales..."
-    )
-
-    col_btn, _ = st.columns([1, 4])
-    with col_btn:
-        procesar_click = st.button("🚀 Analizar con IA")
-
-    if procesar_click:
-        if not cv_input.strip():
-            st.warning("⚠️ Por favor pega algún texto curricular para analizar.")
-        else:
-            with st.spinner("⏳ Conectando con la API y procesando análisis curricular..."):
-                try:
-                    payload = {
-                        "cv_texto": cv_input.strip(),
-                        "docente_id": docente_id_elegido
-                    }
-                    respuesta = requests.post(f"{API_URL}/procesar-cv-ia", json=payload, timeout=60)
-
-                    if respuesta.status_code == 200:
-                        resultado = respuesta.json()
-                        resumen = resultado.get("resumen_procesado", "Sin respuesta.")
-                        es_sim = resultado.get("es_simulado", False)
-                        
-                        st.success("✅ ¡Análisis completado y guardado en la base de datos!")
-                        st.markdown("### 📋 Dictamen de la Inteligencia Artificial:")
-                        st.info(resumen)
-                        
-                        if not es_sim:
-                            st.caption("🟢 Procesado en vivo mediante **LLaMA 3** local.")
+            if st.toggle("✏️ Editar", key=f"ed_{doc_id}"):
+                with st.form(f"form_editar_{doc_id}"):
+                    e1, e2 = st.columns(2)
+                    with e1:
+                        nuevo_nombre = st.text_input("Nombre y apellido", value=doc["nombre"])
+                        nuevo_email = st.text_input("Email", value=doc["email"])
+                    with e2:
+                        nueva_materia = selector_materia("Materia", materias, doc["materia"], key=f"mat_{doc_id}")
+                        nueva_dedicacion = st.selectbox(
+                            "Dedicación", DEDICACIONES,
+                            index=DEDICACIONES.index(doc["dedicacion"]) if doc["dedicacion"] in DEDICACIONES else 0,
+                        )
+                    nuevo_cv = st.text_area("Perfil / antecedentes", value=doc.get("cv_resumen") or "")
+                    if st.form_submit_button("💾 Guardar cambios"):
+                        cambios = {
+                            "nombre": nuevo_nombre.strip(),
+                            "email": nuevo_email.strip(),
+                            "materia": nueva_materia,
+                            "dedicacion": nueva_dedicacion,
+                            "cv_resumen": nuevo_cv.strip(),
+                        }
+                        codigo_put, datos_put = api("PUT", f"/docentes/{doc_id}", json=cambios)
+                        if codigo_put == 200:
+                            st.toast("Docente actualizado")
+                            st.rerun()
                         else:
-                            st.caption("ℹ️ Ejecutado en modo contingencia asistida (Ollama no estaba abierto en segundo plano).")
-                    else:
-                        st.error(f"❌ Error en la API al procesar con IA (Código {respuesta.status_code}).")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ No se pudo conectar con la API de FastAPI. Verifica que esté iniciada.")
-                except requests.exceptions.Timeout:
-                    st.error("⏳ El modelo de IA tardó más de 60 segundos en responder.")
+                            mostrar_error(codigo_put, datos_put)
+
+
+elif opcion == "➕ Registrar Docente":
+    st.header("➕ Registrar Docente")
+
+    materias = catalogo_materias()
+    with st.form("form_alta", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            nombre = st.text_input("Nombre y apellido *", placeholder="Lic. Martín Rossi")
+            email = st.text_input("Email institucional *", placeholder="mrossi@universidad.edu.ar")
+        with c2:
+            materia = selector_materia("Materia *", materias, key="alta_materia")
+            dedicacion = st.selectbox("Dedicación *", DEDICACIONES)
+        cv_resumen = st.text_area("Perfil / antecedentes", placeholder="Formación, experiencia docente y técnica")
+        archivo = st.file_uploader("…o cargar el CV desde un archivo", type=["txt", "pdf"])
+        enviar = st.form_submit_button("💾 Registrar docente")
+
+    if enviar:
+        if archivo is not None and not cv_resumen.strip():
+            try:
+                cv_resumen = leer_archivo_cv(archivo)[:5000]
+            except Exception:
+                st.warning("No se pudo leer el archivo; se registra sin antecedentes.")
+        if not materia:
+            st.error("⚠️ Escribí el nombre de la nueva materia.")
+        else:
+            codigo, datos = api("POST", "/docentes", json={
+                "nombre": nombre.strip(),
+                "email": email.strip(),
+                "materia": materia,
+                "dedicacion": dedicacion,
+                "cv_resumen": cv_resumen.strip(),
+            })
+            if codigo == 201:
+                st.success(f"✅ Docente registrado con el ID #{datos['id']}: {datos['nombre']} — {datos['materia']}")
+                st.balloons()
+            else:
+                mostrar_error(codigo, datos, "No se pudo registrar: ")
+
+
+elif opcion == "📊 Indicadores y Alertas":
+    st.header("📊 Indicadores y Alertas")
+
+    codigo, ind = api("GET", "/indicadores")
+    if codigo != 200:
+        mostrar_error(codigo, ind)
+        st.stop()
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("👥 Docentes", ind["total_docentes"])
+    m2.metric("📚 Materias", ind["total_materias"])
+    m3.metric("✅ Cobertura de materias", f"{ind['cobertura_pct']} %")
+    m4.metric("➗ Docentes por materia", ind["promedio_docentes_por_materia"])
+
+    m5, m6, m7, m8 = st.columns(4)
+    m5.metric("⏱️ Horas semanales contratadas", ind["horas_semanales_contratadas"])
+    m6.metric("🏫 Horas semanales de cátedra", ind["horas_semanales_catedra"])
+    m7.metric("💰 Costo mensual estimado", formato_pesos(ind["costo_mensual_estimado"]))
+    m8.metric("📝 Docentes sin CV", len(ind["docentes_sin_cv"]))
 
     st.divider()
+    g1, g2 = st.columns(2)
+    with g1:
+        st.subheader("Distribución por dedicación")
+        st.bar_chart(ind["por_dedicacion"], horizontal=True)
+        st.caption(" · ".join(f"{k}: {v} %" for k, v in ind["porcentaje_dedicacion"].items()))
+    with g2:
+        st.subheader("Docentes por materia")
+        st.bar_chart(ind["por_materia"], horizontal=True)
 
-    # Historial de evaluaciones persistidas en SQLite
-    st.subheader("📜 Historial de Evaluaciones con IA Realizadas")
-    st.markdown("Todas las evaluaciones generadas por la IA quedan guardadas en la tabla `historial_evaluaciones` de la base de datos.")
+    st.subheader("Cobertura de materias")
+    codigo_m, materias = api("GET", "/materias")
+    if codigo_m == 200:
+        st.dataframe(
+            [{
+                "Materia": m["nombre"],
+                "Departamento": m["departamento"],
+                "Cuatrimestre": m["cuatrimestre"],
+                "Horas semanales": m["horas_semanales"],
+                "Docentes": m["cantidad_docentes"],
+                "Estado": "✅ Cubierta" if m["cubierta"] else "❌ Sin docentes",
+            } for m in materias],
+            hide_index=True, width="stretch",
+        )
 
-    try:
-        res_hist = requests.get(f"{API_URL}/evaluaciones", timeout=5)
-        if res_hist.status_code == 200:
-            historial = res_hist.json()
-            if not historial:
-                st.info("No hay evaluaciones registradas en el historial.")
+    st.divider()
+    st.subheader("🚨 Alertas")
+    codigo_a, alertas = api("GET", "/alertas")
+    if codigo_a != 200:
+        mostrar_error(codigo_a, alertas)
+    else:
+        sev = alertas["por_severidad"]
+        a1, a2, a3 = st.columns(3)
+        a1.metric("🔴 Altas", sev["alta"])
+        a2.metric("🟠 Medias", sev["media"])
+        a3.metric("🔵 Bajas", sev["baja"])
+        if not alertas["alertas"]:
+            st.success("No hay alertas: la planta está en orden.")
+        for alerta in alertas["alertas"]:
+            if alerta["severidad"] == "alta":
+                st.error(f"🔴 {alerta['mensaje']}")
+            elif alerta["severidad"] == "media":
+                st.warning(f"🟠 {alerta['mensaje']}")
             else:
-                for h in historial:
-                    eval_id = h.get("id")
-                    doc_nombre = h.get("docente_nombre") or "Postulante independiente"
-                    materia_h = f" — Cátedra: {h.get('materia')}" if h.get("materia") else ""
-                    fecha_h = h.get("fecha_evaluacion", "")
-                    
-                    with st.expander(f"📄 Evaluación #{eval_id}: {doc_nombre}{materia_h} ({fecha_h})"):
-                        st.markdown("**Texto original del CV evaluado:**")
-                        st.code(h.get("cv_texto_original", ""), language="text")
-                        st.markdown("**Devolución de la IA:**")
-                        st.write(h.get("resumen_ia", ""))
+                st.info(f"🔵 {alerta['mensaje']}")
 
-                        col_espacio, col_eliminar = st.columns([3, 1])
-                        with col_eliminar:
-                            if st.button("🗑️ Eliminar Evaluación", key=f"btn_del_eval_{eval_id}"):
-                                try:
-                                    r_del_eval = requests.delete(f"{API_URL}/evaluaciones/{eval_id}", timeout=5)
-                                    if r_del_eval.status_code == 200:
-                                        st.success(f"Evaluación #{eval_id} eliminada.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"No se pudo eliminar la evaluación (Código {r_del_eval.status_code}).")
-                                except requests.exceptions.RequestException:
-                                    st.error("Error al conectar con la API para eliminar.")
+    st.divider()
+    st.subheader("📝 Informe ejecutivo con IA")
+    if st.button("Generar informe"):
+        with st.spinner("La IA está redactando el informe..."):
+            codigo_r, reporte = api("POST", "/ia/reporte", timeout=180)
+        if codigo_r == 200:
+            st.session_state["reporte_ia"] = reporte["reporte"]
         else:
-            st.warning("No se pudo obtener el historial de evaluaciones.")
-    except requests.exceptions.RequestException:
-        st.warning("Conectando con el historial de evaluaciones...")
+            mostrar_error(codigo_r, reporte)
+    if st.session_state.get("reporte_ia"):
+        with st.container(border=True):
+            st.markdown(st.session_state["reporte_ia"])
+        st.caption("Redactado por IA a partir de los indicadores calculados por el sistema.")
+
+
+elif opcion == "🤖 Análisis de CV con IA":
+    st.header("🤖 Análisis de CV con IA")
+
+    codigo_d, lista_docentes = api("GET", "/docentes")
+    lista_docentes = lista_docentes if codigo_d == 200 else []
+    opciones = {"Postulante (sin docente asociado)": None}
+    opciones.update({f"#{d['id']} · {d['nombre']} ({d['materia']})": d["id"] for d in lista_docentes})
+
+    tab_analizar, tab_historial = st.tabs(["Analizar CV", "Historial"])
+
+    with tab_analizar:
+        docente_id = opciones[st.selectbox("Asociar a", list(opciones.keys()))]
+        origen = st.radio("Origen del CV", ["Pegar texto", "Subir archivo"], horizontal=True)
+        cv_texto = ""
+        if origen == "Pegar texto":
+            cv_texto = st.text_area("Texto del CV", height=180,
+                                    placeholder="Formación, experiencia, tecnologías, antecedentes docentes...")
+        else:
+            archivo = st.file_uploader("Archivo del CV", type=["txt", "pdf"])
+            if archivo is not None:
+                try:
+                    cv_texto = leer_archivo_cv(archivo)
+                    with st.expander(f"Texto extraído ({len(cv_texto)} caracteres)"):
+                        st.text(cv_texto[:3000])
+                except Exception:
+                    st.error("No se pudo leer el archivo.")
+
+        if st.button("🚀 Analizar", type="primary"):
+            st.session_state.pop("analisis", None)
+            st.session_state.pop("error_ia", None)
+            st.session_state.pop("contingencia", None)
+            with st.spinner("Analizando el CV..."):
+                codigo, datos = api("POST", "/ia/analizar-cv", timeout=180,
+                                    json={"cv_texto": cv_texto.strip(), "docente_id": docente_id})
+            if codigo == 200:
+                st.session_state["analisis"] = {"datos": datos, "cv_texto": cv_texto.strip(), "docente_id": docente_id}
+            elif codigo in (503, 504):
+                st.session_state["error_ia"] = {"detalle": detalle(datos), "cv_texto": cv_texto.strip(),
+                                                "docente_id": docente_id}
+            else:
+                mostrar_error(codigo, datos)
+
+        if st.session_state.get("error_ia"):
+            err = st.session_state["error_ia"]
+            st.error(f"🤖 {err['detalle']}")
+            if st.button("Registrar solo el análisis por reglas (sin IA)"):
+                codigo, datos = api("POST", "/procesar-cv-ia", timeout=60,
+                                    json={"cv_texto": err["cv_texto"], "docente_id": err["docente_id"]})
+                if codigo == 200:
+                    st.session_state.pop("error_ia")
+                    st.session_state["contingencia"] = datos
+                    st.rerun()
+                else:
+                    mostrar_error(codigo, datos)
+
+        if st.session_state.get("contingencia"):
+            datos = st.session_state.pop("contingencia")
+            st.success(f"Evaluación #{datos['evaluacion_id']} registrada en modo contingencia (sin IA).")
+            with st.container(border=True):
+                st.markdown(datos["resumen_procesado"])
+
+        if st.session_state.get("analisis"):
+            analisis = st.session_state["analisis"]
+            ia = analisis["datos"]["origen_ia"]
+            reglas = analisis["datos"]["compatibilidad_reglas"]
+            advertencias = analisis["datos"]["advertencias"]
+
+            col_ia, col_reglas = st.columns(2)
+            with col_ia:
+                with st.container(border=True):
+                    st.subheader("🤖 Generado por IA")
+                    st.caption(f"Modelo: {analisis['datos']['modelo']}")
+                    st.markdown(f"**Resumen:** {ia['resumen']}")
+                    st.markdown("**Áreas de experiencia:** " + (", ".join(ia["areas_experiencia"]) or "-"))
+                    st.markdown("**Títulos:** " + (", ".join(ia["titulos"]) or "-"))
+                    anios = ia.get("anios_experiencia")
+                    st.markdown(f"**Años de experiencia:** {anios if anios is not None else '-'}")
+                    st.markdown("**Materias sugeridas:** " + (", ".join(ia["materias_sugeridas"]) or "-"))
+            with col_reglas:
+                with st.container(border=True):
+                    st.subheader("📐 Calculado por reglas")
+                    st.caption("Coincidencias entre el CV y el nombre de cada materia")
+                    if not reglas:
+                        st.info("Sin coincidencias suficientes con el catálogo.")
+                    for c in reglas:
+                        st.markdown(f"**{c['materia']}** — {c['puntaje']} %")
+                        st.progress(c["puntaje"] / 100)
+                        st.caption("Coincidencias: " + ", ".join(c["coincidencias"]))
+
+            if advertencias:
+                st.warning("**Validación de la respuesta de la IA:**\n\n" + "\n".join(f"- {a}" for a in advertencias))
+            else:
+                st.success("La respuesta de la IA pasó todas las validaciones.")
+
+            st.subheader("✅ Revisión y aprobación")
+            resumen_aprobado = st.text_area("Resumen a registrar (editable)", value=ia["resumen"], height=120)
+            b1, b2, _ = st.columns([1, 1, 3])
+            if b1.button("Aprobar y guardar", type="primary"):
+                codigo, datos = api("POST", "/evaluaciones", json={
+                    "cv_texto": analisis["cv_texto"],
+                    "resumen_aprobado": resumen_aprobado.strip(),
+                    "docente_id": analisis["docente_id"],
+                })
+                if codigo == 201:
+                    st.session_state.pop("analisis")
+                    st.toast(f"Evaluación #{datos['id']} guardada")
+                    st.rerun()
+                else:
+                    mostrar_error(codigo, datos)
+            if b2.button("Descartar"):
+                st.session_state.pop("analisis")
+                st.rerun()
+
+    with tab_historial:
+        opciones_hist = {"Todas": None}
+        opciones_hist.update({k: v for k, v in opciones.items() if v is not None})
+        filtro = opciones_hist[st.selectbox("Docente", list(opciones_hist.keys()), key="hist_doc")]
+        codigo_h, historial = api("GET", "/evaluaciones", params={"docente_id": filtro} if filtro else None)
+        if codigo_h != 200:
+            mostrar_error(codigo_h, historial)
+        elif not historial:
+            st.info("No hay evaluaciones registradas.")
+        else:
+            st.caption(f"{len(historial)} evaluación(es)")
+            for h in historial:
+                titulo = h.get("docente_nombre") or "Postulante"
+                materia_h = f" — {h['materia']}" if h.get("materia") else ""
+                with st.expander(f"📄 #{h['id']} · {titulo}{materia_h} · {h.get('fecha_evaluacion', '')}"):
+                    st.markdown("**Resumen registrado:**")
+                    st.markdown(h.get("resumen_ia", ""))
+                    st.markdown("**CV original:**")
+                    st.code(h.get("cv_texto_original", ""), language="text")
+                    if st.button("🗑️ Eliminar evaluación", key=f"del_ev_{h['id']}"):
+                        codigo_del, datos_del = api("DELETE", f"/evaluaciones/{h['id']}")
+                        if codigo_del == 200:
+                            st.toast(f"Evaluación #{h['id']} eliminada")
+                            st.rerun()
+                        else:
+                            mostrar_error(codigo_del, datos_del)

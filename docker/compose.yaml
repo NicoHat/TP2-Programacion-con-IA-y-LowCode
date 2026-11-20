@@ -24,6 +24,19 @@ services:
       timeout: 5s
       retries: 3
 
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    container_name: planta-docente-frontend
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
   n8n:
     image: n8nio/n8n:latest
     container_name: planta-docente-n8n
