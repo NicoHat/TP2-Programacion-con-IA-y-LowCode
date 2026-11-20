@@ -1,9 +1,3 @@
-"""
-Modelos Pydantic: definen y VALIDAN el JSON que entra y sale de la API.
-
-Si un request no cumple estas reglas, FastAPI responde automáticamente
-422 (Unprocessable Entity) antes de tocar la base de datos.
-"""
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -13,7 +7,6 @@ Dedicacion = Literal["Simple", "Semi-exclusiva", "Exclusiva"]
 PATRON_EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
-# ----------------------------------------------------------------- Docentes
 class DocenteCrear(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=120, examples=["Ing. Ana López"])
     email: str = Field(..., pattern=PATRON_EMAIL, max_length=120, examples=["alopez@universidad.edu.ar"])
@@ -23,7 +16,6 @@ class DocenteCrear(BaseModel):
 
 
 class DocenteActualizar(BaseModel):
-    """Todos los campos son opcionales: solo se modifica lo que se envía (PATCH)."""
     nombre: Optional[str] = Field(None, min_length=2, max_length=120)
     email: Optional[str] = Field(None, pattern=PATRON_EMAIL, max_length=120)
     materia: Optional[str] = Field(None, min_length=2, max_length=120)
@@ -48,7 +40,6 @@ class Docente(BaseModel):
     fecha_alta: Optional[str] = None
 
 
-# ----------------------------------------------------------------- Materias
 class Materia(BaseModel):
     id: int
     nombre: str
@@ -59,7 +50,6 @@ class Materia(BaseModel):
     cubierta: bool
 
 
-# ----------------------------------------------------------------- IA
 class AnalisisCVEntrada(BaseModel):
     cv_texto: str = Field(..., min_length=20, max_length=20000,
                           description="Texto del currículum o perfil a analizar.")
@@ -68,7 +58,6 @@ class AnalisisCVEntrada(BaseModel):
 
 
 class AnalisisIA(BaseModel):
-    """Estructura que le exigimos a la IA. Si no la cumple, se descarta la respuesta."""
     resumen: str = Field(..., min_length=10)
     areas_experiencia: list[str] = []
     titulos: list[str] = []
@@ -83,19 +72,15 @@ class CompatibilidadMateria(BaseModel):
 
 
 class AnalisisCVRespuesta(BaseModel):
-    origen_ia: AnalisisIA                         # lo que GENERÓ el modelo de IA
-    compatibilidad_reglas: list[CompatibilidadMateria]  # lo que CALCULÓ Python con reglas
-    advertencias: list[str]                       # resultados de validar la salida de la IA
+    origen_ia: AnalisisIA
+    compatibilidad_reglas: list[CompatibilidadMateria]
+    advertencias: list[str]
     modelo: str
     docente_id: Optional[int] = None
     requiere_revision_humana: bool = True
 
 
 class EvaluacionConfirmar(BaseModel):
-    """
-    Supervisión humana: la IA solo PROPONE; una persona revisa/edita el resumen
-    y recién ahí se guarda con este endpoint.
-    """
     cv_texto: str = Field(..., min_length=30, max_length=20000)
     resumen_aprobado: str = Field(..., min_length=10, max_length=5000)
     docente_id: Optional[int] = Field(None, gt=0)

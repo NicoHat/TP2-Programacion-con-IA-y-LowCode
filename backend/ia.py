@@ -1,16 +1,3 @@
-"""
-Integración con IA mediante Ollama (modelos locales, gratuitos, sin enviar datos
-personales a servicios externos).
-
-Por qué Ollama + llama3:
-  - Cumple la consigna: gratis y se ejecuta localmente.
-  - Los CVs tienen datos personales: no salen de la máquina.
-Límites conocidos (hay que explicarlos en la defensa):
-  - Puede inventar datos ("alucinar") -> validamos la estructura y contrastamos
-    las materias sugeridas contra el catálogo real.
-  - Es lento en PCs sin GPU -> timeout configurable (OLLAMA_TIMEOUT).
-  - La IA nunca guarda nada sola: una persona aprueba (ver POST /evaluaciones).
-"""
 import json
 
 import requests
@@ -22,19 +9,17 @@ from backend.schemas import AnalisisIA
 
 
 class IAError(Exception):
-    """Error de la capa de IA con el código HTTP que debe devolver la API."""
     def __init__(self, mensaje: str, status_code: int = 502):
         super().__init__(mensaje)
         self.mensaje = mensaje
         self.status_code = status_code
 
 
-# ------------------------------------------------------------- cliente Ollama
 def _generar(prompt: str, formato_json: bool = False) -> str:
     payload = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
                "options": {"temperature": 0.2}}
     if formato_json:
-        payload["format"] = "json"   # Ollama fuerza la salida a JSON válido
+        payload["format"] = "json"
     try:
         r = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=OLLAMA_TIMEOUT)
     except requests.exceptions.ConnectionError:
@@ -56,7 +41,6 @@ def _generar(prompt: str, formato_json: bool = False) -> str:
 
 
 def estado() -> dict:
-    """Chequea si Ollama está disponible y si el modelo configurado está descargado."""
     try:
         r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
         modelos = [m.get("name", "") for m in r.json().get("models", [])]
@@ -66,7 +50,6 @@ def estado() -> dict:
         return {"ollama": "no disponible", "modelo": OLLAMA_MODEL, "modelo_descargado": False}
 
 
-# ------------------------------------------------------------- análisis de CV
 PROMPT_CV = """Sos un asistente de Recursos Humanos de una universidad.
 Analizá el siguiente currículum de un docente y respondé SOLO con un JSON con esta forma exacta:
 {{
@@ -89,7 +72,6 @@ def _parsear_analisis(texto: str) -> AnalisisIA:
     try:
         datos = json.loads(texto)
     except json.JSONDecodeError:
-        # A veces el modelo agrega texto antes/después del JSON: lo recortamos.
         inicio, fin = texto.find("{"), texto.rfind("}")
         if inicio == -1 or fin <= inicio:
             raise ValueError("La respuesta no contiene JSON.")
@@ -101,11 +83,6 @@ def _parsear_analisis(texto: str) -> AnalisisIA:
 
 
 def analizar_cv(cv_texto: str, materias_catalogo: list[str]) -> tuple[AnalisisIA, list[str]]:
-    """
-    Devuelve (analisis, advertencias).
-    Valida la salida de la IA: estructura (Pydantic) + materias contra el catálogo.
-    Reintenta una vez si la IA devuelve un JSON mal formado.
-    """
     prompt = PROMPT_CV.format(materias=", ".join(materias_catalogo) or "(sin materias)",
                               cv=cv_texto[:8000])
     ultimo_error = None
@@ -118,7 +95,6 @@ def analizar_cv(cv_texto: str, materias_catalogo: list[str]) -> tuple[AnalisisIA
     else:
         raise IAError(f"La IA devolvió un formato inválido dos veces seguidas: {ultimo_error}", 502)
 
-    # --- Validación de resultados: no confiamos ciegamente en la IA ---
     advertencias = []
     catalogo = {normalizar(m): m for m in materias_catalogo}
     validas, inventadas = [], []
@@ -141,7 +117,6 @@ def analizar_cv(cv_texto: str, materias_catalogo: list[str]) -> tuple[AnalisisIA
     return analisis, advertencias
 
 
-# ------------------------------------------------------------- reporte
 PROMPT_REPORTE = """Sos analista de Recursos Humanos de una universidad.
 Con estos indicadores de la planta docente (calculados por el sistema, son exactos):
 {indicadores}

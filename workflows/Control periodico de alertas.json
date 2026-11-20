@@ -1,0 +1,221 @@
+{
+  "name": "Control periódico de alertas",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "8e12aedd-6480-4351-8174-6747b243d203",
+      "name": "Cada lunes 8 h"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "127a5751-868a-45ef-950e-5ff54b554b3b",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/alertas",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        100
+      ],
+      "id": "85022538-6493-4ff4-9427-83408fde4d10",
+      "name": "Consultar alertas (API)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d777c586-d1bf-486a-8d32-3b916fc931d7",
+              "leftValue": "={{ $json.body.hay_alertas_altas }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        80,
+        100
+      ],
+      "id": "53f69edc-5f87-48e9-ae01-1a1a6d68217b",
+      "name": "¿Hay alertas altas?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/ia/reporte",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        0
+      ],
+      "id": "a0dc2903-4c28-480b-8b05-41a60f5e369b",
+      "name": "Generar informe con IA (API)"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ asunto: '⚠️ Alertas en la planta docente', alertas_altas: $('Consultar alertas (API)').item.json.body.alertas.filter(a => a.severidad === 'alta').map(a => a.mensaje), por_severidad: $('Consultar alertas (API)').item.json.body.por_severidad, informe_ia: $json.statusCode === 200 ? $json.body.reporte : 'Informe IA no disponible: ' + $json.body.detail }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        0
+      ],
+      "id": "27aab6d7-ed70-45b3-8e9c-2cc879399b09",
+      "name": "Notificación"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'sin_alertas_altas', total_alertas: $json.body.total, por_severidad: $json.body.por_severidad, revisado: $now.toISO() }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        220
+      ],
+      "id": "fe011abe-f938-48ff-af97-7562d8b1f6c3",
+      "name": "Planta en orden"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cada lunes 8 h": {
+      "main": [
+        [
+          {
+            "node": "Consultar alertas (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar alertas (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar alertas (API)": {
+      "main": [
+        [
+          {
+            "node": "¿Hay alertas altas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay alertas altas?": {
+      "main": [
+        [
+          {
+            "node": "Generar informe con IA (API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Planta en orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar informe con IA (API)": {
+      "main": [
+        [
+          {
+            "node": "Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cba173e0-18df-4d28-bca2-dceb4aeb3730",
+  "meta": {},
+  "tags": []
+}

@@ -1,11 +1,3 @@
-"""
-Endpoints de Inteligencia Artificial.
-
-Flujo con supervisión humana:
-  1. POST /ia/analizar-cv  -> la IA PROPONE un análisis (no se guarda nada).
-  2. La persona revisa/edita el resumen en la interfaz.
-  3. POST /evaluaciones    -> se guarda lo APROBADO por la persona.
-"""
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -70,14 +62,8 @@ def reporte_ia():
     return ReporteIA(reporte=texto, modelo=OLLAMA_MODEL, indicadores=indicadores, alertas=alertas)
 
 
-# --- Endpoint que usa el frontend (frontend/app.py) ---
 @router.post("/procesar-cv-ia", summary="Analizar CV y guardarlo en el historial (usado por el frontend)")
 def procesar_cv_ia(entrada: AnalisisCVEntrada):
-    """
-    Analiza el CV con IA, lo guarda en el historial y devuelve un texto listo para mostrar.
-    Si Ollama no está disponible, entra en MODO CONTINGENCIA: devuelve solo el análisis
-    calculado con reglas (sin IA) y lo marca con es_simulado=True.
-    """
     docente = db.obtener_docente_por_id(entrada.docente_id) if entrada.docente_id else None
     if entrada.docente_id and not docente:
         raise HTTPException(status_code=404, detail=f"No existe un docente con ID {entrada.docente_id}.")
@@ -104,7 +90,7 @@ def procesar_cv_ia(entrada: AnalisisCVEntrada):
             lineas.append("⚠️ **Validación:** " + " ".join(advertencias))
         es_simulado, detalle = False, {"origen_ia": a.model_dump(), "advertencias": advertencias}
     except ia.IAError as e:
-        if e.status_code not in (503, 504):   # error de formato de la IA: se informa, no se simula
+        if e.status_code not in (503, 504):
             raise
         lineas = [
             "**Modo contingencia:** la IA no está disponible, se muestra solo el análisis por reglas.",
@@ -116,8 +102,6 @@ def procesar_cv_ia(entrada: AnalisisCVEntrada):
     resumen = "\n\n".join(lineas)
     evaluacion_id = db.registrar_evaluacion_cv(entrada.cv_texto, resumen, docente_id=entrada.docente_id)
     if docente:
-        # registrar_evaluacion_cv copia el texto completo al perfil del docente.
-        # Dejamos en el perfil solo el resumen de la IA, o el perfil anterior si no hubo IA.
         perfil = (docente.get("cv_resumen") or "") if es_simulado else detalle["origen_ia"]["resumen"]
         db.actualizar_docente(docente["id"], cv_resumen=perfil)
     return {

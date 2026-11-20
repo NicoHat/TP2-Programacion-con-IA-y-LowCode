@@ -1,4 +1,3 @@
-"""Endpoints de análisis de la planta: materias, indicadores y alertas (reglas, sin IA)."""
 from fastapi import APIRouter
 
 from backend import reglas

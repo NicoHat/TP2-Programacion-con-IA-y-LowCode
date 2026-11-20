@@ -1,4 +1,3 @@
-"""Endpoints de gestión de docentes (ABM + búsqueda y filtros)."""
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -33,12 +32,12 @@ def obtener_docente(docente_id: int):
 @router.post("", response_model=Docente, status_code=status.HTTP_201_CREATED,
              summary="Registrar un docente")
 def crear_docente(datos: DocenteCrear):
-    nuevo_id = db.crear_nuevo_docente(**datos.model_dump())   # 409 si el email ya existe
+    nuevo_id = db.crear_nuevo_docente(**datos.model_dump())
     return db.obtener_docente_por_id(nuevo_id)
 
 
 @router.patch("/{docente_id}", response_model=Docente, summary="Modificar datos de un docente")
-@router.put("/{docente_id}", response_model=Docente, include_in_schema=False)  # lo usa frontend/app.py
+@router.put("/{docente_id}", response_model=Docente, include_in_schema=False)
 def actualizar_docente(docente_id: int, cambios: DocenteActualizar):
     _buscar_o_404(docente_id)
     db.actualizar_docente(docente_id, **cambios.model_dump(exclude_none=True))

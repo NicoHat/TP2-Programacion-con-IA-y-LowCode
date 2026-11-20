@@ -1,0 +1,338 @@
+{
+  "name": "Análisis de CV con IA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analizar-cv",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "63570364-77b6-4140-a6d7-4838cb0f66c8",
+      "name": "Webhook CV",
+      "webhookId": "3b263662-ba55-4e72-9be6-0f13369ce82f"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "abf4a01a-ce5a-45dc-830f-4f1329a7f176",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ cv_texto: \"Licenciada en Ciencias de la Computaci\\u00f3n (UBA). 9 a\\u00f1os de experiencia docente en bases de datos y programaci\\u00f3n. Especialista en SQL, PostgreSQL, modelado relacional y procesos ETL. Desarrollo backend con Python y FastAPI.\", docente_id: 3 }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -180,
+        200
+      ],
+      "id": "0c64fd83-55b4-4976-9cee-6d425fbbfecc",
+      "name": "CV de ejemplo"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ cv_texto: $json.body ? $json.body.cv_texto : $json.cv_texto, docente_id: ($json.body ? $json.body.docente_id : $json.docente_id) ?? null }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        40,
+        0
+      ],
+      "id": "78524c1a-69bf-493a-8e94-14be7f917415",
+      "name": "Preparar CV"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/ia/analizar-cv",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ cv_texto: $json.cv_texto, docente_id: $json.docente_id }) }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "id": "81b20224-5135-44a7-9e8d-3a8e1721349a",
+      "name": "Analizar CV (API + IA)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "f4273b0b-3d20-46aa-ae42-bf8d64b73bac",
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 200
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "0be076f6-609d-41cb-903d-77f3a8fa1658",
+      "name": "¿IA respondió? (200)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "712f6fa9-52f9-4914-9482-f3269c4fb258",
+              "leftValue": "={{ $json.body.advertencias.length }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -100
+      ],
+      "id": "af0f0db6-45d4-4e8c-a8f8-6bc0ce82ba9c",
+      "name": "¿Sin advertencias?"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'error_ia', codigo_http: $json.statusCode, motivo: $json.body.detail }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        140
+      ],
+      "id": "9668bf62-9a02-4d15-9d27-c505bdff89de",
+      "name": "Error de IA"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/evaluaciones",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ cv_texto: $('Preparar CV').item.json.cv_texto, resumen_aprobado: $json.body.origen_ia.resumen, docente_id: $('Preparar CV').item.json.docente_id }) }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        -200
+      ],
+      "id": "88000e1e-d470-48ac-9c71-743c3cdbf072",
+      "name": "Guardar evaluación (API)"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'guardado', evaluacion_id: $json.body.id, docente: $json.body.docente_nombre, resumen: $json.body.resumen_ia, compatibilidad_reglas: $('Analizar CV (API + IA)').item.json.body.compatibilidad_reglas }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1180,
+        -200
+      ],
+      "id": "1eb16711-df18-4c6c-839c-5fcb55587015",
+      "name": "Evaluación guardada"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'requiere_revision_humana', advertencias: $json.body.advertencias, resumen_propuesto_ia: $json.body.origen_ia.resumen, materias_sugeridas_ia: $json.body.origen_ia.materias_sugeridas, compatibilidad_reglas: $json.body.compatibilidad_reglas, siguiente_paso: 'Revisar y aprobar desde el frontend (Análisis de CV)' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        0
+      ],
+      "id": "2e869fc9-7344-488c-999a-e0c83bee7a2b",
+      "name": "Requiere revisión humana"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook CV": {
+      "main": [
+        [
+          {
+            "node": "Preparar CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "CV de ejemplo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV de ejemplo": {
+      "main": [
+        [
+          {
+            "node": "Preparar CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar CV": {
+      "main": [
+        [
+          {
+            "node": "Analizar CV (API + IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analizar CV (API + IA)": {
+      "main": [
+        [
+          {
+            "node": "¿IA respondió? (200)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿IA respondió? (200)": {
+      "main": [
+        [
+          {
+            "node": "¿Sin advertencias?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error de IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Sin advertencias?": {
+      "main": [
+        [
+          {
+            "node": "Guardar evaluación (API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Requiere revisión humana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar evaluación (API)": {
+      "main": [
+        [
+          {
+            "node": "Evaluación guardada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ca16c65d-5e55-418b-b2db-1da3eb7848c2",
+  "meta": {},
+  "tags": []
+}

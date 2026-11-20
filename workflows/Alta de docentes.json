@@ -1,0 +1,209 @@
+{
+  "name": "Alta de docentes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alta-docente",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "b3938693-294e-451a-8354-70d6f41c812f",
+      "name": "Webhook alta docente",
+      "webhookId": "10a2e7d3-a622-4132-974f-bd0a6c220315"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        200
+      ],
+      "id": "de400ff3-cee0-44b3-86cd-5450e6bba1a6",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ body: { nombre: 'Lic. Martín Suárez', email: 'msuarez' + $now.toMillis() + '@universidad.edu.ar', materia: 'Bases de Datos Relacionales', dedicacion: 'Simple', cv_resumen: 'Docente de bases de datos con experiencia en SQL.' } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -180,
+        200
+      ],
+      "id": "f425158e-df27-45ff-b9a5-3525ea9b086c",
+      "name": "Docente de ejemplo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/docentes",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ nombre: $json.body.nombre, email: $json.body.email, materia: $json.body.materia, dedicacion: $json.body.dedicacion, cv_resumen: $json.body.cv_resumen || '' }) }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        0
+      ],
+      "id": "09495fb3-164e-45d6-baa0-0c3367240d02",
+      "name": "Registrar docente (API)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "4196df78-8ea3-42a6-9d5a-f57db3fc90cd",
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 201
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ],
+      "id": "ddb9ba9a-e568-482b-9786-28eb04808aab",
+      "name": "¿Registrado? (201)"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'registrado', id: $json.body.id, nombre: $json.body.nombre, materia: $json.body.materia, dedicacion: $json.body.dedicacion }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        -100
+      ],
+      "id": "40e18976-33b7-4fb5-8ce3-a175b57ab163",
+      "name": "Docente registrado"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ estado: 'rechazado', codigo_http: $json.statusCode, motivo: $json.body.detail }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        100
+      ],
+      "id": "ca13aacd-e5e5-40c5-92e4-46099fe7b95a",
+      "name": "Alta rechazada"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook alta docente": {
+      "main": [
+        [
+          {
+            "node": "Registrar docente (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Docente de ejemplo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Docente de ejemplo": {
+      "main": [
+        [
+          {
+            "node": "Registrar docente (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar docente (API)": {
+      "main": [
+        [
+          {
+            "node": "¿Registrado? (201)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Registrado? (201)": {
+      "main": [
+        [
+          {
+            "node": "Docente registrado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alta rechazada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1bc8586e-30b1-456c-b073-0e377764562e",
+  "meta": {},
+  "tags": []
+}

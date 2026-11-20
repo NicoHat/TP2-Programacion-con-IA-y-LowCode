@@ -29,8 +29,6 @@ opcion = st.sidebar.radio(
     ]
 )
 
-st.sidebar.divider()
-st.sidebar.info("💡 **Tip para la defensa**: Este frontend se comunica con FastAPI mediante llamadas HTTP (`GET`, `POST`, `DELETE`).")
 
 
 # ==============================================================================

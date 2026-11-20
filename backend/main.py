@@ -1,10 +1,3 @@
-"""
-API del Sistema Inteligente de Gestión de Planta Docente.
-
-Ejecutar desde la raíz del proyecto:
-    uvicorn backend.main:app --reload
-Documentación interactiva: http://127.0.0.1:8000/docs
-"""
 import logging
 from contextlib import asynccontextmanager
 
@@ -21,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    db.init_db()          # crea tablas y carga datos de ejemplo si la base está vacía
+    db.init_db()
     yield
 
 
@@ -50,6 +43,6 @@ def health():
     try:
         total = db.calcular_indicadores()["total_docentes"]
         estado_db = {"base_de_datos": "ok", "docentes": total}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         estado_db = {"base_de_datos": f"error: {e}"}
     return {**estado_db, **ia.estado()}

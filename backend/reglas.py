@@ -1,10 +1,3 @@
-"""
-Reglas de negocio calculadas con Python (SIN inteligencia artificial).
-
-La consigna pide distinguir lo que se calcula con reglas explícitas de lo que
-genera la IA. Todo lo de este módulo es determinístico: mismos datos -> mismo
-resultado, y cada número se puede explicar.
-"""
 import re
 import unicodedata
 
@@ -16,17 +9,13 @@ from backend.config import (
     UMBRAL_COMPATIBILIDAD,
 )
 
-# Palabras que no aportan para comparar un CV con una materia.
 STOPWORDS = {
     "de", "del", "la", "las", "el", "los", "y", "e", "en", "a", "con", "para",
     "por", "i", "ii", "iii", "general", "departamento", "elementos", "introduccion",
 }
 
-# Siglas cortas que sí son significativas aunque tengan 2 letras.
 SIGLAS = {"ia", "ai", "bd", "ml"}
 
-# Palabras clave extra por tema: si la materia contiene la clave,
-# también se buscan estos términos en el CV.
 SINONIMOS = {
     "datos": ["sql", "sqlite", "postgresql", "mysql", "etl", "modelado"],
     "relacional": ["sql", "integridad referencial", "normalizacion", "modelado relacional"],
@@ -42,9 +31,7 @@ SINONIMOS = {
 }
 
 
-# ------------------------------------------------------------- utilidades
 def normalizar(texto: str) -> str:
-    """minúsculas y sin tildes: 'Programación' -> 'programacion'."""
     texto = unicodedata.normalize("NFKD", str(texto or "")).encode("ascii", "ignore").decode()
     return texto.lower()
 
@@ -54,9 +41,7 @@ def palabras_clave(texto: str) -> set[str]:
     return {t for t in tokens if (len(t) > 2 or t in SIGLAS) and t not in STOPWORDS}
 
 
-# ------------------------------------------------------------- materias
 def materias_con_cobertura() -> list[dict]:
-    """Cada materia del catálogo + cuántos docentes tiene asignados."""
     materias = db.listar_materias()
     por_materia = db.calcular_indicadores()["por_materia"]
     conteo = {normalizar(k): v for k, v in por_materia.items()}
@@ -67,9 +52,7 @@ def materias_con_cobertura() -> list[dict]:
     return resultado
 
 
-# ------------------------------------------------------------- indicadores
 def indicadores_planta() -> dict:
-    """Indicadores completos de la planta docente."""
     base = db.calcular_indicadores()
     docentes = db.obtener_docentes()
     materias = materias_con_cobertura()
@@ -108,11 +91,6 @@ def indicadores_planta() -> dict:
 
 
 def generar_alertas(indicadores: dict | None = None) -> dict:
-    """
-    Genera alertas a partir de los indicadores.
-    Pensado para el workflow de notificación de n8n: el nodo IF puede decidir
-    con el campo 'hay_alertas_altas'.
-    """
     ind = indicadores or indicadores_planta()
     alertas = []
 
@@ -147,15 +125,7 @@ def generar_alertas(indicadores: dict | None = None) -> dict:
     }
 
 
-# ------------------------------------------------------------- compatibilidad CV-materia
 def compatibilidad_cv_materias(cv_texto: str, limite: int = 5) -> list[dict]:
-    """
-    Scoring por reglas explícitas:
-      - Cada palabra significativa del NOMBRE de la materia es un
-        "concepto". Un concepto se cumple si en el CV aparece la palabra o
-        alguno de sus sinónimos (SINONIMOS).
-      - puntaje = conceptos cumplidos / conceptos totales * 100
-    """
     cv_norm = normalizar(cv_texto)
     cv_tokens = palabras_clave(cv_texto)
 
@@ -171,7 +141,6 @@ def compatibilidad_cv_materias(cv_texto: str, limite: int = 5) -> list[dict]:
         for concepto in conceptos:
             grupo = {concepto}
             for clave, extras in SINONIMOS.items():
-                # claves cortas (ej. "ia") deben coincidir exacto: evita que "ingenierIA" matchee
                 if clave == concepto or (len(clave) > 3 and clave in concepto):
                     grupo.update(extras)
             encontrados = {t for t in grupo if aparece(t)}
