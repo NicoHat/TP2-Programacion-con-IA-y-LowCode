@@ -198,11 +198,11 @@ Las pruebas usan una base de datos temporal y una respuesta simulada de Ollama.
 ## Integrantes y responsabilidades
 
 | Integrante | Responsabilidad |
-|---|---|
-| NicoHat | Backend: API FastAPI, reglas de negocio, integración con IA, Docker y pruebas |
-| Siseronte | Base de datos: modelo SQLite, validaciones y datos de ejemplo |
-| Daniel Perez Albiero | Frontend: interfaz en Streamlit e integración con la API |
-| *(completar)* | Automatizaciones n8n |
+
+Nicolas Daniel Rotiroti: Backend, automatización e IA (API FastAPI, reglas de negocio, integración con Ollama, workflows n8n, Docker y pruebas)
+Tomas Gonzalez: Base de datos (modelo SQLite, validaciones y datos de ejemplo)
+Daniel Perez Albiero: Frontend (interfaz en Streamlit e integración con la API)
+
 
 ## Bitácora de uso de IA
 

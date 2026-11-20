@@ -8,7 +8,7 @@ Usamos IA de dos formas en el trabajo: como **herramienta para desarrollar** (as
 |---|---|
 | Claude (Anthropic) | Backend: diseñar la estructura de la API, escribir endpoints y tests, integrar el frontend con la API y armar los workflows de n8n |
 | Ollama + llama3 | La IA del sistema: corre local en la PC, analiza los CVs y redacta el informe de la planta |
-| *(completar)* | *(herramientas que usaron los demás para la base de datos, el frontend y n8n)* |
+| Antigravity | Se utilizo para la base de datos y frontend
 
 ## Decisiones técnicas
 
